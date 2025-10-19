@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Appointments;
 
+use App\Models\Order;
 use Livewire\Component;
 use Livewire\WithPagination;
 use App\Models\Appointment;
@@ -37,6 +38,13 @@ class Index extends Component
     public $appointmentToDelete;
     public $showLogs = false;
     public $logs = [];
+
+    public $showExportModal = false;
+    public $exportStatus = '';
+    public $exportClient = '';
+    public $exportStartDate;
+    public $exportEndDate;
+    public $exportType = 'pdf'; // padrão
 
     protected $rules = [
         'client' => 'required|string|max:255',
@@ -260,6 +268,38 @@ class Index extends Component
     {
         $this->reset(['filterClient', 'filterMechanic', 'filterDate', 'filterStatus']);
         $this->filterStatus = 'todos';
+    }
+
+    public function exportData()
+    {
+        $query = Order::query();
+
+        if ($this->exportStatus && $this->exportStatus !== 'Todos') {
+            $query->where('status', $this->exportStatus);
+        }
+
+        if ($this->exportClient) {
+            $query->where('client', 'like', '%' . $this->exportClient . '%');
+        }
+
+        if ($this->exportStartDate) {
+            $query->whereDate('created_at', '>=', $this->exportStartDate);
+        }
+
+        if ($this->exportEndDate) {
+            $query->whereDate('created_at', '<=', $this->exportEndDate);
+        }
+
+        $orders = $query->orderByDesc('created_at')->get();
+
+        if ($this->exportType === 'pdf') {
+            $pdf = \PDF::loadView('exports.orders-pdf', ['orders' => $orders]);
+            return response()->streamDownload(fn() => print($pdf->output()), 'relatorio-pedidos.pdf');
+        }
+
+        if ($this->exportType === 'excel') {
+            return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\OrdersExport($orders), 'relatorio-pedidos.xlsx');
+        }
     }
 
     public function viewLogs($appointmentId)
