@@ -2,17 +2,20 @@
 
 namespace App\Livewire\Appointments;
 
-use App\Models\Order;
 use Livewire\Component;
 use Livewire\WithPagination;
 use App\Models\Appointment;
 use App\Models\AppointmentLog;
 use Illuminate\Support\Facades\Auth;
+use Rap2hpoutre\FastExcel\FastExcel;
+use PDF;
+use Carbon\Carbon;
 
 class Index extends Component
 {
     use WithPagination;
 
+    // Campos principais
     public $appointmentId;
     public $client;
     public $service;
@@ -24,27 +27,31 @@ class Index extends Component
     public $status = 'pendente';
     public $cancel_reason;
 
-    // filtros
+    // Filtros
     public $filterClient = '';
     public $filterMechanic = '';
     public $filterDate = '';
     public $filterStatus = 'todos';
 
+    // Controle de modais
     public $showModal = false;
     public $showCancelModal = false;
+    public $confirmingDelete = false;
+    public $showLogs = false;
+    public $showExportModal = false;
     public $isEdit = false;
 
-    public $confirmingDelete = false;
+    // Dados auxiliares
     public $appointmentToDelete;
-    public $showLogs = false;
     public $logs = [];
+    public $alertMessage = '';
 
-    public $showExportModal = false;
+    // Filtros de exportação
     public $exportStatus = '';
     public $exportClient = '';
     public $exportStartDate;
     public $exportEndDate;
-    public $exportType = 'pdf'; // padrão
+    public $exportType = 'pdf';
 
     protected $rules = [
         'client' => 'required|string|max:255',
@@ -57,6 +64,7 @@ class Index extends Component
         'status' => 'required|in:pendente,concluido,cancelado',
     ];
 
+    // ================= RENDER ==================
     public function render()
     {
         $query = Appointment::query();
@@ -83,6 +91,8 @@ class Index extends Component
             'appointments' => $appointments,
         ])->layout('layouts.app');
     }
+
+    // ================= CRUD ==================
 
     public function openCreateModal()
     {
@@ -117,10 +127,7 @@ class Index extends Component
             $appointment = Appointment::findOrFail($this->appointmentId);
 
             if ($appointment->status !== 'pendente') {
-                $this->dispatch('notify', [
-                    'type' => 'error',
-                    'message' => 'Só é possível editar agendamentos pendentes.',
-                ]);
+                $this->alertMessage = 'Só é possível editar agendamentos pendentes.';
                 return;
             }
 
@@ -139,13 +146,10 @@ class Index extends Component
                 'appointment_id' => $appointment->id,
                 'user_id' => Auth::id(),
                 'action' => 'atualizado',
-                'description' => "Agendamento atualizado para {$appointment->client}"
+                'description' => "Agendamento atualizado para {$appointment->client}",
             ]);
 
-            $this->dispatch('notify', [
-                'type' => 'success',
-                'message' => 'Agendamento atualizado com sucesso!',
-            ]);
+            $this->alertMessage = 'Agendamento atualizado com sucesso!';
         } else {
             $appointment = Appointment::create([
                 'client' => $this->client,
@@ -163,22 +167,25 @@ class Index extends Component
                 'appointment_id' => $appointment->id,
                 'user_id' => Auth::id(),
                 'action' => 'criação',
-                'description' => "Agendamento criado para {$appointment->client} em {$appointment->date} {$appointment->time}"
+                'description' => "Agendamento criado para {$appointment->client} em {$appointment->date} {$appointment->time}",
             ]);
 
-            $this->dispatch('notify', [
-                'type' => 'success',
-                'message' => 'Agendamento criado com sucesso!',
-            ]);
+            $this->alertMessage = 'Agendamento criado com sucesso!';
         }
 
         $this->resetForm();
         $this->showModal = false;
     }
 
+    // ================= CANCELAMENTO ==================
+
     public function openCancelModal($id)
     {
-        $this->appointmentId = $id;
+        $appointment = Appointment::findOrFail($id);
+        $this->appointmentId = $appointment->id;
+        $this->client = $appointment->client;
+        $this->date = $appointment->date;
+        $this->time = $appointment->time;
         $this->cancel_reason = '';
         $this->showCancelModal = true;
     }
@@ -192,10 +199,7 @@ class Index extends Component
         $appointment = Appointment::findOrFail($this->appointmentId);
 
         if ($appointment->status !== 'pendente') {
-            $this->dispatch('notify', [
-                'type' => 'error',
-                'message' => 'Só é possível cancelar agendamentos pendentes.',
-            ]);
+            $this->alertMessage = 'Só é possível cancelar agendamentos pendentes.';
             return;
         }
 
@@ -208,29 +212,14 @@ class Index extends Component
             'appointment_id' => $appointment->id,
             'user_id' => Auth::id(),
             'action' => 'cancelamento',
-            'description' => "Agendamento cancelado. Motivo: {$this->cancel_reason}"
+            'description' => "Agendamento cancelado. Motivo: {$this->cancel_reason}",
         ]);
 
-        $this->dispatch('notify', [
-            'type' => 'success',
-            'message' => 'Agendamento cancelado com sucesso!',
-        ]);
-
+        $this->alertMessage = 'Agendamento cancelado com sucesso!';
         $this->showCancelModal = false;
     }
 
-
-
-    public function delete($id)
-    {
-        $appointment = Appointment::findOrFail($id);
-        $appointment->delete();
-
-        $this->dispatch('notify', [
-            'type' => 'success',
-            'message' => 'Agendamento excluído com sucesso!',
-        ]);
-    }
+    // ================= EXCLUSÃO ==================
 
     public function confirmDelete($id)
     {
@@ -245,15 +234,17 @@ class Index extends Component
                 'appointment_id' => $this->appointmentToDelete->id,
                 'user_id' => auth()->id(),
                 'action' => 'exclusão',
-                'description' => "Agendamento do cliente {$this->appointmentToDelete->client} em {$this->appointmentToDelete->date} foi excluído."
+                'description' => "Agendamento do cliente {$this->appointmentToDelete->client} em {$this->appointmentToDelete->date} foi excluído.",
             ]);
 
             $this->appointmentToDelete->delete();
             $this->appointmentToDelete = null;
             $this->confirmingDelete = false;
-            session()->flash('success', 'Agendamento excluído com sucesso!');
+            $this->alertMessage = 'Agendamento excluído com sucesso!';
         }
     }
+
+    // ================= AUXILIARES ==================
 
     public function resetForm()
     {
@@ -270,38 +261,12 @@ class Index extends Component
         $this->filterStatus = 'todos';
     }
 
-    public function exportData()
+    public function loadAppointments()
     {
-        $query = Order::query();
-
-        if ($this->exportStatus && $this->exportStatus !== 'Todos') {
-            $query->where('status', $this->exportStatus);
-        }
-
-        if ($this->exportClient) {
-            $query->where('client', 'like', '%' . $this->exportClient . '%');
-        }
-
-        if ($this->exportStartDate) {
-            $query->whereDate('created_at', '>=', $this->exportStartDate);
-        }
-
-        if ($this->exportEndDate) {
-            $query->whereDate('created_at', '<=', $this->exportEndDate);
-        }
-
-        $orders = $query->orderByDesc('created_at')->get();
-
-        if ($this->exportType === 'pdf') {
-            $pdf = \PDF::loadView('exports.orders-pdf', ['orders' => $orders]);
-            return response()->streamDownload(fn() => print($pdf->output()), 'relatorio-pedidos.pdf');
-        }
-
-        if ($this->exportType === 'excel') {
-            return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\OrdersExport($orders), 'relatorio-pedidos.xlsx');
-        }
+        $this->resetPage();
     }
 
+    // ================= LOGS ==================
     public function viewLogs($appointmentId)
     {
         $this->logs = AppointmentLog::where('appointment_id', $appointmentId)
@@ -310,6 +275,72 @@ class Index extends Component
             ->get();
 
         $this->showLogs = true;
+    }
+
+    // ================= EXPORTAÇÃO ==================
+    public function exportData()
+    {
+        $query = Appointment::query();
+
+        if ($this->exportStatus && $this->exportStatus !== 'todos') {
+            $query->where('status', $this->exportStatus);
+        }
+
+        if ($this->exportClient) {
+            $query->where('client', 'like', '%' . $this->exportClient . '%');
+        }
+
+        if ($this->exportStartDate) {
+            $query->whereDate('date', '>=', $this->exportStartDate);
+        }
+
+        if ($this->exportEndDate) {
+            $query->whereDate('date', '<=', $this->exportEndDate);
+        }
+
+        $appointments = $query->orderByDesc('date')->get();
+
+        if ($this->exportType === 'pdf') {
+            $pdf = PDF::loadView('exports.appointments-pdf', ['appointments' => $appointments]);
+            return response()->streamDownload(fn() => print($pdf->output()), 'relatorio-agendamentos.pdf');
+        }
+
+        return response()->streamDownload(function () use ($appointments) {
+            (new FastExcel($appointments->map(function ($a) {
+                return [
+                    'Cliente' => $a->client,
+                    'Serviço' => $a->service,
+                    'Celular' => $a->cellphone,
+                    'Mecânico' => $a->mechanic ?? '-',
+                    'Data' => Carbon::parse($a->date)->format('d/m/Y'),
+                    'Hora' => $a->time,
+                    'Status' => ucfirst($a->status),
+                ];
+            })))->export('php://output');
+        }, 'relatorio-agendamentos.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    // ================= EXPORTAÇÃO MODAL ==================
+
+    public function openExportModal()
+    {
+        $this->reset([
+            'exportStatus',
+            'exportClient',
+            'exportStartDate',
+            'exportEndDate',
+            'exportType'
+        ]);
+
+        $this->exportType = 'pdf';
+        $this->showExportModal = true;
+    }
+
+    public function closeExportModal()
+    {
+        $this->showExportModal = false;
     }
 
 }
