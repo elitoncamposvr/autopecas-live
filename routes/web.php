@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Livewire\Users\Index as UserIndex;
 use App\Livewire\Orders\Index as OrderIndex;
+use App\Livewire\Appointments\Index as AppointmentIndex;
 
 
 Route::get('/', function () {
@@ -23,6 +24,7 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth'])->group(function() {
     Route::get('/users', UserIndex::class)->name('livewire.users.index');
     Route::get('/orders', OrderIndex::class)->name('livewire.orders.index');
+    Route::get('/appointments', AppointmentIndex::class)->name('livewire.appointments.index');
 });
 
 require __DIR__.'/auth.php';

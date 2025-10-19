@@ -11,16 +11,19 @@ return new class extends Migration
     {
         Schema::create('appointments', function (Blueprint $table) {
             $table->id();
-            $table->string('client');             // Cliente
-            $table->string('service');            // Serviço
-            $table->dateTime('scheduled_at');     // Data/Hora do agendamento
-            $table->enum('status', ['pendente', 'confirmado', 'concluido', 'cancelado'])->default('pendente');
-            $table->text('notes')->nullable();    // Observações
-            $table->foreignId('created_by')->constrained('users')->onDelete('cascade');
-            $table->softDeletes();
+            $table->string('client');
+            $table->text('service');
+            $table->string('cellphone');
+            $table->string('mechanic')->nullable();
+            $table->text('notes')->nullable();
+            $table->date('date');
+            $table->time('time');
+            $table->enum('status', ['pendente', 'concluido', 'cancelado'])->default('pendente');
+            $table->text('cancel_reason')->nullable();
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->timestamps();
+            $table->softDeletes();
         });
-
     }
 
     public function down(): void
