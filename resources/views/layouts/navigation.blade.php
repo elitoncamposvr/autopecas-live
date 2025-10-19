@@ -30,6 +30,12 @@
                 </div>
 
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                    <x-nav-link :href="route('livewire.quotes.index')" :active="request()->routeIs('livewire.quotes.index')">
+                        {{ __('Cotações') }}
+                    </x-nav-link>
+                </div>
+
+                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                     <x-nav-link :href="route('livewire.users.index')" :active="request()->routeIs('livewire.users.index')">
                         {{ __('Usuários') }}
                     </x-nav-link>
