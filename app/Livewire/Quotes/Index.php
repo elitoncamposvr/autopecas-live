@@ -15,7 +15,11 @@ use Illuminate\Support\Facades\DB;
 class Index extends Component
 {
     use WithPagination;
+    public $selectedItem;
+    public $quotes = [];
+    public $logs = [];
 
+    public $activeTab = 'details';
     public $itemId;
     public $description;
     public $brand_desired;
@@ -37,6 +41,13 @@ class Index extends Component
     public $search = '';
     public $filterStatus = '';
     public $filterSupplier = '';
+
+    public $quoteSummary = [
+        'total_quotes' => 0,
+        'lowest_value' => null,
+        'lowest_supplier' => null,
+    ];
+
 
     protected $paginationTheme = 'bootstrap';
 
@@ -96,7 +107,7 @@ class Index extends Component
             'required_quantity' => 'required|integer|min:1',
         ]);
 
-        Item::create([
+        $item = Item::create([
             'description' => $this->description,
             'brand_desired' => $this->brand_desired,
             'item_code' => $this->item_code,
@@ -105,6 +116,8 @@ class Index extends Component
             'status' => 'quoting',
             'created_by' => Auth::id(),
         ]);
+
+        $this->logActivity($item->id, 'item_created', null, $item->description);
 
         $this->resetForm();
         $this->alert('success', 'Item created successfully.');
@@ -135,6 +148,8 @@ class Index extends Component
             'required_quantity' => $this->required_quantity,
         ]);
 
+        $this->logActivity($item->id, 'item_updated', null, 'Item details updated');
+
         $this->alert('success', 'Item updated successfully.');
         $this->showEditModal = false;
     }
@@ -149,6 +164,7 @@ class Index extends Component
 
         $item->delete();
 
+        $this->logActivity($id, 'item_deleted', null, 'Item deleted');
         $this->alert('success', 'Item deleted successfully.');
     }
 
@@ -156,8 +172,52 @@ class Index extends Component
     public function openViewModal($id)
     {
         $this->itemId = $id;
+        $this->selectedItem = Item::with(['quotes.supplier', 'creator'])->find($id);
+        $this->quotes = $this->selectedItem?->quotes ?? [];
+        $this->logs = ActivityLog::where('item_id', $id)
+            ->with('user')
+            ->latest()
+            ->get();
+
+        $this->logs = \App\Models\ActivityLog::where('item_id', $id)
+            ->with('user')
+            ->latest()
+            ->get();
+
+// Calcular resumo das cotações
+        $totalQuotes = $this->quotes->count();
+
+        if ($totalQuotes > 0) {
+            $lowestQuote = $this->quotes->sortBy('total_value')->first();
+            $this->quoteSummary = [
+                'total_quotes' => $totalQuotes,
+                'lowest_value' => $lowestQuote->total_value,
+                'lowest_supplier' => $lowestQuote->supplier->name ?? '-',
+            ];
+        } else {
+            $this->quoteSummary = [
+                'total_quotes' => 0,
+                'lowest_value' => null,
+                'lowest_supplier' => null,
+            ];
+        }
+
         $this->showViewModal = true;
+
     }
+
+    protected function logActivity($itemId, $action, $oldValue = null, $newValue = null)
+    {
+        ActivityLog::create([
+            'item_id' => $itemId,
+            'action' => $action,
+            'old_value' => $oldValue,
+            'new_value' => $newValue,
+            'user_id' => Auth::id(),
+        ]);
+    }
+
+
 
     public function addQuote()
     {
@@ -188,6 +248,8 @@ class Index extends Component
         ]);
 
         $this->resetQuoteForm();
+        $this->logActivity($this->itemId, 'quote_added', null, "Quote created for supplier ID {$this->supplier_id}");
+        $this->updateQuoteSummary();
         $this->alert('success', 'Quote added successfully.');
     }
 
@@ -221,8 +283,89 @@ class Index extends Component
             ]);
         });
 
-        $this->alert('success', 'Quote selected for purchase.');
+        $this->logActivity($item->id, 'quote_selected', $oldStatus, 'negotiating');
+        $this->updateQuoteSummary();
+
     }
+
+    public function updateQuoteSummary()
+    {
+        $this->quotes = $this->selectedItem->quotes()->with('supplier')->get();
+        $totalQuotes = $this->quotes->count();
+
+        if ($totalQuotes > 0) {
+            $lowestQuote = $this->quotes->sortBy('total_value')->first();
+            $this->quoteSummary = [
+                'total_quotes' => $totalQuotes,
+                'lowest_value' => $lowestQuote->total_value,
+                'lowest_supplier' => $lowestQuote->supplier->name ?? '-',
+            ];
+        } else {
+            $this->quoteSummary = [
+                'total_quotes' => 0,
+                'lowest_value' => null,
+                'lowest_supplier' => null,
+            ];
+        }
+    }
+
+
+    public function markAsPurchased($id)
+    {
+        $item = Item::findOrFail($id);
+
+        if ($item->status !== 'negotiating') {
+            return $this->alert('error', 'Item must be in negotiation before marking as purchased.');
+        }
+
+        $old = $item->status;
+        $item->update(['status' => 'purchased']);
+
+        $this->logActivity($item->id, 'status_changed', $old, 'purchased');
+
+        // Atualiza visualização em tempo real
+        $this->openViewModal($item->id);
+        $this->alert('success', 'Item marked as purchased.');
+    }
+
+    public function markAsFinalized($id)
+    {
+        $item = Item::findOrFail($id);
+
+        if ($item->status !== 'purchased') {
+            return $this->alert('error', 'Item must be purchased before marking as finalized.');
+        }
+
+        $old = $item->status;
+        $item->update(['status' => 'finalized']);
+
+        $this->logActivity($item->id, 'status_changed', $old, 'finalized');
+
+        // Atualiza visualização em tempo real
+        $this->openViewModal($item->id);
+        $this->alert('success', 'Item finalized successfully.');
+    }
+
+    public function reopenQuoting($id)
+    {
+        $item = Item::findOrFail($id);
+
+        if (!in_array($item->status, ['negotiating', 'purchased'])) {
+            return $this->alert('error', 'Only negotiating or purchased items can be reopened.');
+        }
+
+        $old = $item->status;
+        $item->update(['status' => 'quoting']);
+
+        // Desmarcar todas as cotações selecionadas
+        \App\Models\Quote::where('item_id', $id)->update(['included_in_purchase' => false]);
+
+        $this->logActivity($item->id, 'status_changed', $old, 'quoting');
+        $this->openViewModal($item->id);
+        $this->alert('success', 'Item reopened for quoting.');
+    }
+
+
 
     // 🔹 Utilitários
     public function alert($type, $message)
@@ -244,6 +387,11 @@ class Index extends Component
     public function clearFilters()
     {
         $this->reset(['filterStatus', 'filterSupplier', 'search']);
+    }
+
+    public function setActiveTab($tab)
+    {
+        $this->activeTab = $tab;
     }
 
 }

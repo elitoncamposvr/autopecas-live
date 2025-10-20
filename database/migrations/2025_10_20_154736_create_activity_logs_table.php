@@ -9,20 +9,22 @@ return new class extends Migration
 
     public function up(): void
     {
-        Schema::create('purchase_selections', function (Blueprint $table) {
+        Schema::create('activity_logs', function (Blueprint $table) {
             $table->id();
 
             $table->foreignId('item_id')->constrained('items')->onDelete('cascade');
-            $table->foreignId('quote_id')->constrained('quotes')->onDelete('cascade');
-            $table->foreignId('selected_by')->constrained('users');
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
 
-            $table->timestamp('selected_at')->default(DB::raw('CURRENT_TIMESTAMP'));
+            $table->string('action');
+            $table->string('old_value')->nullable();
+            $table->string('new_value')->nullable();
+
             $table->timestamps();
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('purchase_selections');
+        Schema::dropIfExists('activity_logs');
     }
 };
