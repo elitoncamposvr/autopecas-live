@@ -36,6 +36,18 @@
                 </div>
 
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                    <x-nav-link :href="route('livewire.quotes.suppliers')" :active="request()->routeIs('livewire.quotes.suppliers')">
+                        {{ __('Fornecedores') }}
+                    </x-nav-link>
+                </div>
+
+                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                    <x-nav-link :href="route('livewire.quotes.purchases')" :active="request()->routeIs('livewire.quotes.purchases')">
+                        {{ __('Compras') }}
+                    </x-nav-link>
+                </div>
+
+                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                     <x-nav-link :href="route('livewire.users.index')" :active="request()->routeIs('livewire.users.index')">
                         {{ __('Usuários') }}
                     </x-nav-link>

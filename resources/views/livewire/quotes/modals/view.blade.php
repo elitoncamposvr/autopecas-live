@@ -125,6 +125,13 @@
                 <div>
                     <h3 class="text-md font-semibold text-gray-700 mb-2">Quotes</h3>
                     <div class="overflow-x-auto mb-4">
+                        <div class="flex justify-end mb-3">
+                            <button wire:click="openAddQuoteModal"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded">
+                                + Add Quote
+                            </button>
+                        </div>
+
                         <table class="min-w-full text-sm border rounded">
                             <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
                             <tr>
@@ -211,6 +218,9 @@
                         </table>
                     </div>
                 </div>
+            @endif
+            @if($showAddQuoteModal)
+                @include('livewire.quotes.modals.add-quote')
             @endif
         @endif
 

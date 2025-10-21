@@ -42,6 +42,9 @@ class Index extends Component
     public $filterStatus = '';
     public $filterSupplier = '';
 
+    public $showAddQuoteModal = false;
+
+
     public $quoteSummary = [
         'total_quotes' => 0,
         'lowest_value' => null,
@@ -358,7 +361,7 @@ class Index extends Component
         $item->update(['status' => 'quoting']);
 
         // Desmarcar todas as cotações selecionadas
-        \App\Models\Quote::where('item_id', $id)->update(['included_in_purchase' => false]);
+        Quote::where('item_id', $id)->update(['included_in_purchase' => false]);
 
         $this->logActivity($item->id, 'status_changed', $old, 'quoting');
         $this->openViewModal($item->id);
@@ -392,6 +395,47 @@ class Index extends Component
     public function setActiveTab($tab)
     {
         $this->activeTab = $tab;
+    }
+
+    public function openAddQuoteModal()
+    {
+        $this->resetValidation();
+        $this->reset(['supplier_id', 'brand', 'quantity', 'unit_price']);
+        $this->showAddQuoteModal = true;
+    }
+
+    public function saveQuote()
+    {
+        $this->validate([
+            'supplier_id' => 'required|exists:suppliers,id',
+            'brand' => 'nullable|string|max:255',
+            'quantity' => 'required|numeric|min:1',
+            'unit_price' => 'required|numeric|min:0',
+        ]);
+
+        $item = $this->selectedItem;
+        $total = $this->quantity * $this->unit_price;
+
+        $quote = Quote::create([
+            'item_id' => $item->id,
+            'supplier_id' => $this->supplier_id,
+            'brand' => $this->brand,
+            'quantity' => $this->quantity,
+            'unit_price' => $this->unit_price,
+            'total_value' => $total,
+            'included_in_purchase' => false,
+            'created_by' => Auth::id(),
+        ]);
+
+        // Atualiza lista de cotações e resumo
+        $this->quotes = $item->quotes()->with('supplier')->get();
+        $this->updateQuoteSummary();
+
+        // Log automático
+        $this->logActivity($item->id, 'quote_added', null, "Added quote from supplier ID {$this->supplier_id}");
+
+        $this->reset(['supplier_id', 'brand', 'quantity', 'unit_price', 'showAddQuoteModal']);
+        $this->dispatch('alert', ['type' => 'success', 'message' => 'Quote added successfully.']);
     }
 
 }

@@ -6,7 +6,11 @@ use App\Livewire\Users\Index as UserIndex;
 use App\Livewire\Orders\Index as OrderIndex;
 use App\Livewire\Orders\Report as OrderReport;
 use App\Livewire\Appointments\Index as AppointmentIndex;
-use App\Livewire\Quotes\Index as QuoteIndex;
+use App\Livewire\Quotes\Index as QuotesIndex;
+use App\Livewire\Quotes\Suppliers as QuotesSuppliers;
+use App\Livewire\Quotes\Purchases as QuotesPurchases;
+use App\Livewire\Suppliers\Index as SuppliersIndex;
+
 
 
 
@@ -32,7 +36,11 @@ Route::middleware(['auth'])->group(function() {
 
     Route::get('/appointments', AppointmentIndex::class)->name('livewire.appointments.index');
 
-    Route::get('/quotes', QuoteIndex::class)->name('livewire.quotes.index');
+    Route::get('/quotes', QuotesIndex::class)->name('livewire.quotes.index');
+    Route::get('/quotes/suppliers', QuotesSuppliers::class)->name('livewire.quotes.suppliers');
+    Route::get('/quotes/purchases', QuotesPurchases::class)->name('livewire.quotes.purchases');
+
+    Route::get('/suppliers', SuppliersIndex::class)->name('livewire.suppliers.index');
 });
 
 require __DIR__.'/auth.php';
