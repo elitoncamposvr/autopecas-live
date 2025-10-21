@@ -11,11 +11,14 @@ class ActivityLog extends Model
 
     protected $fillable = [
         'item_id',
+        'user_id',
+        'module',
         'action',
         'old_value',
         'new_value',
-        'user_id',
+        'details',
     ];
+
 
     public function item()
     {
